@@ -1,4 +1,5 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 
@@ -101,7 +102,15 @@ router.get("/", async (req, res) => {
 // GET SINGLE ORDER
 router.get("/:id", async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id);
+    const requestedId = req.params.id;
+    let order = null;
+
+    // The UI can send either the Mongo document id or the customer-facing order number.
+    if (mongoose.Types.ObjectId.isValid(requestedId)) {
+      order = await Order.findById(requestedId);
+    } else if (/^\d+$/.test(requestedId)) {
+      order = await Order.findOne({ orderId: Number(requestedId) });
+    }
 
     if (!order) {
       return res.status(404).json({
@@ -140,7 +149,15 @@ router.put("/:id/status", async (req, res) => {
       });
     }
 
-    const order = await Order.findById(req.params.id);
+    const requestedId = req.params.id;
+    let order = null;
+
+    // Accept both the Mongo document id and the customer-facing order number.
+    if (mongoose.Types.ObjectId.isValid(requestedId)) {
+      order = await Order.findById(requestedId);
+    } else if (/^\d+$/.test(requestedId)) {
+      order = await Order.findOne({ orderId: Number(requestedId) });
+    }
 
     if (!order) {
       return res.status(404).json({
@@ -158,8 +175,16 @@ router.put("/:id/status", async (req, res) => {
       });
     }
 
-    if (status === "Completed" && order.status === "Completed") {
-      return res.status(200).json(order);
+    if (order.status === "Completed") {
+      if (status === "Completed") {
+        return res.status(400).json({
+          message: "Order already completed.",
+        });
+      }
+
+      return res.status(400).json({
+        message: "Completed orders cannot be updated.",
+      });
     }
 
     if (status === "Completed" && !order.inventoryUpdated) {
